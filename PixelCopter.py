@@ -39,6 +39,7 @@ from keras.layers import MaxPooling2D, Dense, Dropout, Activation
 from keras.optimizers import Adam
 from ple import PLE
 from ple.games.pixelcopter import Pixelcopter
+from win32api import GetSystemMetrics
 
 print(f"Tensor Flow Version: {tf.__version__}")
 print(f"Keras Version: {keras.__version__}")
@@ -50,8 +51,10 @@ gpu = len(tf.config.list_physical_devices('GPU')) > 0
 print("GPU is", "available" if gpu else "NOT AVAILABLE")
 
 # Sets the initial window position of the game
-x = 100
-y = 100
+WIDTH = GetSystemMetrics(0)
+HEIGHT = GetSystemMetrics(1)
+x = WIDTH - 500
+y = 200
 os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (x, y)
 
 
@@ -102,7 +105,6 @@ class DQNAgent:
     LEARNING_RATE = 1e-3
     BATCH_SIZE = 32
     INPUT_SIZE = 7
-    LAYER_SIZE = 500
     OUTPUT_SIZE = 2
     EPSILON = 1
     DECAY_RATE = 0.005
@@ -137,7 +139,6 @@ class DQNAgent:
         model = Sequential()
 
         model.add(Dense(32, input_shape=(self.INPUT_SIZE, ), activation="relu"))
-        model.add(Dropout(0.2))
 
         model.add(Dense(64, activation="relu"))
         model.add(Dropout(0.2))
@@ -145,7 +146,7 @@ class DQNAgent:
         model.add(Dense(64, activation="relu"))
         model.add(Dropout(0.2))
 
-        model.add(Dense(self.OUTPUT_SIZE, activation='linear'))  # ACTION_SPACE_SIZE = how many choices (9)
+        model.add(Dense(self.OUTPUT_SIZE, activation='sigmoid'))  # ACTION_SPACE_SIZE = how many choices (9)
         model.compile(loss="mse", optimizer=Adam(lr=self.LEARNING_RATE), metrics=['accuracy'])
         return model
 
@@ -167,63 +168,56 @@ class DQNAgent:
     def get_qs(self, state, step):
         return self.model.predict(np.array(state))[0]
 
-    def construct_memories(self, replay):
+    def construct_memories(self):
+        # Get a minibatch of random samples from memory replay table
+        replay = random.sample(self.replay_memory, self.BATCH_SIZE)
+        # Get current states from minibatch, then query NN model for Q values
         states = np.array([step[0] for step in replay])
-        new_states = np.array([step[3] for step in replay])
         Q = self.model.predict(states)
-        Q_new = self.model.predict(new_states)
-        replay_size = len(replay)
-        X = np.empty((replay_size, self.INPUT_SIZE))
-        Y = np.empty((replay_size, self.OUTPUT_SIZE))
-        for i in range(replay_size):
-            state_r, action_r, reward_r, new_state_r, done_r = replay[i]
-            target = Q[i]
-            target[action_r] = reward_r
-            if not done_r:
-                target[action_r] += self.GAMMA * np.argmax(Q_new[i])
-            X[i] = state_r
-            Y[i] = target
+        # Get future states from minibatch, then query NN model for Q values
+        new_states = np.array([step[3] for step in replay])
+        Q_next = self.model.predict(new_states)
+
+        X = []
+        Y = []
+
+        for index, (state, action, reward, state_, done) in enumerate(replay):
+            # If not a terminal state, get new q from future states, otherwise set it to 0
+            # almost like with Q Learning, but we use just part of equation here
+            if not done:
+                max_Q = np.amax(Q_next[index])
+                new_Q = reward + self.GAMMA * max_Q
+            else:
+                new_Q = reward
+
+            # Update the Q value for given state
+            target = Q[index]
+            target[action] = new_Q
+
+            # Append new values to training data
+            X.append(state)
+            Y.append(target)
         return X, Y
 
     def train(self, is_terminal, step):
         if not os.path.isdir('models'):
             os.makedirs('models')
 
+        # Start training only if certain number of samples is already saved
         if len(self.replay_memory) < self.MEMORY_SIZE:
             return
 
-        minibatch = random.sample(self.replay_memory, self.BATCH_SIZE)
-        # current batch of 32 states (index 0 represents the current states in each transition)
-        current_states = np.array([transition[0] for transition in minibatch])
-        # current 32 q values (predictions) from FIXED model
-        current_qs_list = self.model.predict(current_states)
-        # new batch of 32 states (index 3 represents the destination states from each transition)
-        new_states = np.array([transition[3] for transition in minibatch])
-        # current 32 q values (predictions) from TARGET model
-        next_qs_list = self.target_model.predict(new_states)
-
-        X = []
-        y = []
-
-        for index, (state, action, reward, state_, done) in enumerate(minibatch):
-            if not done:
-                max_Q_next = np.max(next_qs_list[index])
-                new_Q = reward + self.GAMMA * max_Q_next
-            else:
-                new_Q = reward
-
-            current_qs = current_qs_list[index]
-            current_qs[action] = new_Q
-
-            X.append(state)
-            y.append(current_qs)
+        # constructs training data for training of the neural network
+        X, y = self.construct_memories()
 
         self.model.fit(np.array(X), np.array(y), batch_size=self.BATCH_SIZE, verbose=1, shuffle=False, callbacks=[self.tensorboard] if is_terminal else None)
 
+        # Update target network counter after every episode
         if is_terminal:
             # self.model.fit(np.array(X), np.array(y), batch_size=self.BATCH_SIZE, verbose=1, shuffle=False, callbacks=[self.tensorboard])
             self.target_update_counter += 1
 
+        # If counter reaches a set value, update the target network with weights of main network
         if self.target_update_counter > self.UPDATE_TARGET_LIMIT:
             self.target_model.set_weights(self.model.get_weights())
             self.target_update_counter = 0
@@ -233,14 +227,11 @@ class DQNAgent:
         print("Prediction", prediction)
         return np.argmax(prediction)
 
-    # def format_state(self, state):
-    #     return np.array(list(state.values()))
-
 
 # init
 def main():
-    game = Pixelcopter(width=250, height=250)
-    env = PLE(game, fps=30, display_screen=False, force_fps=True)
+    game = Pixelcopter(width=480, height=480)
+    env = PLE(game, fps=30, display_screen=True, force_fps=True)
     env.init()
     episode_rewards = []
     agent = DQNAgent()
