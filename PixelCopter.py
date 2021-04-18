@@ -24,7 +24,7 @@ import pickle
 import random
 import platform
 import sys
-import time
+import time, datetime
 from collections import deque
 from pprint import pprint
 
@@ -110,16 +110,23 @@ class DQNAgent:
     DECAY_RATE = 0.005
     MIN_EPSILON = 0.1
     GAMMA = 0.99
-    MEMORY_SIZE = 1000
+    MEMORY_SIZE = 500
     UPDATE_TARGET_LIMIT = 5
-    MODEL_NAME = f"DQN model LR={LEARNING_RATE} BATCH={BATCH_SIZE}"
+    MODEL_NAME = f"DQN model LR={LEARNING_RATE} BATCH={BATCH_SIZE} MEM_SIZE={MEMORY_SIZE}"
+    LOAD_MODEL = keras.models.load_model("models/DQN model LR=0.001 BATCH=32 MEM_SIZE=500_____7.30max___-4.61avg___-6.00min__1618680833.h5")
 
     # based on documentation, state has 7 features
     # output is 2 dimensions, 0 = do nothing, 1 = jump
 
-    def __init__(self):
+    def __init__(self, mode="train"):
+        # depending on what mode the agent is in, will determine how the agent chooses actions
+        # if agent is training, EPSILON = 1 and will decay over time with epsilon probability of exploring
+        # if agent is playing (using trained model), EPSILON = 0 and only choose actions based on Q network
+        self.EPSILON = 1 if mode == "train" else 0
+        print(self.EPSILON)
         # main model  # gets trained every step
-        self.model = self.create_model()
+        self.model = self.create_model() if mode == "train" else self.LOAD_MODEL
+        print(self.model.summary())
         print("Finished building baseline model..")
         self.action_map = {
             0: None,
@@ -131,14 +138,14 @@ class DQNAgent:
         self.target_model.set_weights(self.model.get_weights())
 
         self.replay_memory = deque(maxlen=self.MEMORY_SIZE)
-        self.tensorboard = ModifiedTensorBoard(log_dir=f"logs/{self.MODEL_NAME}-{int(time.time())}")
+        self.tensorboard = ModifiedTensorBoard(log_dir=f"logs/{self.MODEL_NAME}-{int(time.time())}") if mode == "train" else None
         self.target_update_counter = 0
         self.rewards = []
 
     def create_model(self):
         model = Sequential()
 
-        model.add(Dense(32, input_shape=(self.INPUT_SIZE, ), activation="relu"))
+        model.add(Dense(32, input_shape=(self.INPUT_SIZE,), activation="relu"))
 
         model.add(Dense(64, activation="relu"))
         model.add(Dropout(0.2))
@@ -146,7 +153,7 @@ class DQNAgent:
         model.add(Dense(64, activation="relu"))
         model.add(Dropout(0.2))
 
-        model.add(Dense(self.OUTPUT_SIZE, activation='sigmoid'))  # ACTION_SPACE_SIZE = how many choices (9)
+        model.add(Dense(self.OUTPUT_SIZE, activation='linear'))  # ACTION_SPACE_SIZE = how many choices (9)
         model.compile(loss="mse", optimizer=Adam(lr=self.LEARNING_RATE), metrics=['accuracy'])
         return model
 
@@ -210,7 +217,8 @@ class DQNAgent:
         # constructs training data for training of the neural network
         X, y = self.construct_memories()
 
-        self.model.fit(np.array(X), np.array(y), batch_size=self.BATCH_SIZE, verbose=1, shuffle=False, callbacks=[self.tensorboard] if is_terminal else None)
+        self.model.fit(np.array(X), np.array(y), batch_size=self.BATCH_SIZE, verbose=1, shuffle=False,
+                       callbacks=[self.tensorboard] if is_terminal else None)
 
         # Update target network counter after every episode
         if is_terminal:
@@ -228,18 +236,18 @@ class DQNAgent:
         return np.argmax(prediction)
 
 
-# init
-def main():
-    game = Pixelcopter(width=480, height=480)
+# Train Q network using DQN algorithm
+def train():
+    game = Pixelcopter(width=300, height=300)
     env = PLE(game, fps=30, display_screen=True, force_fps=True)
     env.init()
     episode_rewards = []
-    agent = DQNAgent()
-    num_episodes = 10_000
-    interval = 50
+    agent = DQNAgent("train")
+    num_episodes = 5000
+    interval = 100
     print("State attributes", env.getGameState().keys())
     print("All actions", env.getActionSet())
-    for episode in range(1, num_episodes+1):
+    for episode in range(1, num_episodes + 1):
         agent.tensorboard.step = episode
         done = False
         step = 1
@@ -269,16 +277,19 @@ def main():
             step += 1
         # Append episode rewards to list of all episode rewards
         episode_rewards.append(total_reward)
-        canUpdate = episode % interval
-        print(canUpdate)
-        if not canUpdate or episode == 1:
+        can_update = episode % interval
+        print(can_update)
+        if not can_update or episode == 1:
             average_reward = np.mean(episode_rewards[-interval:])
             min_reward = np.min(episode_rewards[-interval:])
             max_reward = np.max(episode_rewards[-interval:])
-            agent.tensorboard.update_stats(reward_avg=average_reward, reward_min=min_reward, reward_max=max_reward, epsilon=agent.EPSILON)
+            agent.tensorboard.update_stats(reward_avg=average_reward, reward_min=min_reward, reward_max=max_reward,
+                                           epsilon=agent.EPSILON)
 
             # Save model, but only when min reward is greater or equal a set value
-            agent.model.save(f'models/{agent.MODEL_NAME}__{max_reward:_>7.2f}max_{average_reward:_>7.2f}avg_{min_reward:_>7.2f}min__{int(time.time())}.model')
+            model_folder = datetime.datetime.now().strftime("%d-%m-%Y %H%M%S")
+            agent.model.save(
+                f'models/{model_folder}/{agent.MODEL_NAME}__{max_reward:_>7.2f}max_{average_reward:_>7.2f}avg_{min_reward:_>7.2f}min.h5')
         # Decay epsilon
         if agent.EPSILON > agent.MIN_EPSILON:
             agent.EPSILON *= agent.DECAY_RATE
@@ -287,5 +298,34 @@ def main():
         env.reset_game()
 
 
+# run the game using best DQN model
+def play():
+    game = Pixelcopter(width=300, height=300)
+    env = PLE(game, fps=30, display_screen=True, force_fps=True)
+    env.init()
+    agent = DQNAgent("play")
+    step = 0
+    state = np.array(list(env.getGameState().values()))
+    while True:
+        if env.game_over():
+            env.reset_game()
+            step = 0
+
+        action_index, action = agent.select_action(state)
+        action_string = 'jump!' if action_index == 1 else 'chill'
+        reward = env.act(action)
+        new_state = np.array(list(env.getGameState().values()))
+
+        # PRINT CURRENT STATS
+        print("Current State:", state)
+        print("Action:", action, action_string)
+        print("Reward:", reward)
+        print("New State:", new_state)
+
+        state = new_state
+        step += 1
+
+
 if __name__ == "__main__":
-    main()
+    # train()
+    play()
