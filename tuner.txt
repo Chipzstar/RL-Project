@@ -1,0 +1,52 @@
+ def tune_optimizer_model(hp):
+            # model = keras.Sequential()
+            # model.add(keras.layers.Dense(
+            #     units=18,
+            #     activation="relu",
+            #     input_shape=(INPUT_SIZE,)
+            # ))
+            # model.add(keras.layers.Dense(1, activation='sigmoid'))
+            # optimizer = Adam(lr=LEARNING_RATE)
+            # model.compile(
+            #     optimizer=optimizer,
+            #     loss='binary_crossentropy',
+            #     metrics=['accuracy'])
+
+            model = Sequential()
+            model.add(Dense(32, input_shape=(self.INPUT_SIZE,), activation="relu"))
+            model.add(Dropout(0.2))
+
+            model.add(Dense(64, activation="relu"))
+            model.add(Dropout(0.2))
+
+            model.add(Dense(64, activation="relu"))
+            model.add(Dropout(0.2))
+
+            model.add(Dense(self.OUTPUT_SIZE, activation='linear'))  # ACTION_SPACE_SIZE = how many choices (9)
+            model.compile(loss="mse", optimizer=Adam(lr=self.LEARNING_RATE), metrics=['accuracy'])
+
+            return model
+
+        tuner = RandomSearch(
+            tune_optimizer_model,
+            objective='accuracy',
+            max_trials=20,
+            executions_per_trial=3
+        )
+
+        tuner.search_space_summary()
+
+        from tensorflow.keras.callbacks import TensorBoard
+        tb = TensorBoard()
+
+        tuner.search(x=np.array(X),
+                     y=np.array(y),
+                     epochs=3,
+                     batch_size=self.BATCH_SIZE,
+                     callbacks=[tb])
+
+        models_tuner = tuner.get_best_models(num_models=1)
+
+        best_model = models_tuner[0]
+
+        self.model = best_model

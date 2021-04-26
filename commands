@@ -1,0 +1,4 @@
+
+docker build --tag ubuntu_jupyter_notebook .
+
+docker run --name ubuntu_jupyter_notebook -p 8888:8888 -d ubuntu_jupyter_notebook
