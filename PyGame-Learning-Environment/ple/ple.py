@@ -420,8 +420,8 @@ class PLE(object):
         """
         Returns the reward the agent has gained as the difference between the last action and the current one.
         """
-        print("Current score: ", self.game.getScore())
-        print("Previous score: ", self.previous_score)
+        # print("Current score: ", self.game.getScore())
+        # print("Previous score: ", self.previous_score)
         reward = self.game.getScore() - self.previous_score
         self.previous_score = self.game.getScore()
 

@@ -33,10 +33,12 @@ import numpy as np
 import pandas as pd
 import sklearn as sk
 import tensorflow as tf
+from tqdm import tqdm
 from keras import Sequential
 from keras.callbacks import TensorBoard
 from keras.layers import Dense, Dropout, BatchNormalization
 from keras.optimizers import Adam
+from keras import initializers
 from ple import PLE
 from ple.games.pixelcopter import Pixelcopter
 from win32api import GetSystemMetrics
@@ -110,16 +112,16 @@ class DQNAgent:
     MIN_EPSILON = 0.1
     GAMMA = 0.99
     MEMORY_SIZE = 5000
-    MIN_MEMORY_SIZE = 1000
+    MIN_MEMORY_SIZE = 500
     UPDATE_TARGET_LIMIT = 5
     LOAD_MODEL = keras.models.load_model(
-        "models/best/DQN model LR=0.0001 BATCH=8 MEM_SIZE=1000____23.00max___-2.05 avg___-4.60min.h5")
+        "models/best/DQN model LR=0.001 BATCH=32 MEM_SIZE=500____57.60max____7.97 avg___-4.10min.h5")
 
     # based on documentation, state has 7 features
     # output is 2 dimensions, 0 = do nothing, 1 = jump
 
     def __init__(self, mode="train", nodes=32, memory_size=500, final_act="linear", minibatch=32,
-                 lr=1e-3):
+                 lr=1e-2):
         # depending on what mode the agent is in, will determine how the agent chooses actions
         # if agent is training, EPSILON = 1 and will decay over time with epsilon probability of exploring
         # if agent is playing (using trained model), EPSILON = 0 and only choose actions based on Q network
@@ -138,26 +140,32 @@ class DQNAgent:
             0: None,
             1: 119
         }
-        # Target model this is what we .predict against every step
+        # Target model this is what we predict against every step
         self.target_model = self.create_model()
         print("Finished building target model..")
         self.target_model.set_weights(self.model.get_weights())
         self.replay_memory = deque(maxlen=self.MEMORY_SIZE)
-        self.tensorboard = ModifiedTensorBoard(log_dir=f"logs/{self.MODEL_NAME}-{int(time.time())}") if mode == "train" else None
+        self.tensorboard = ModifiedTensorBoard(
+            log_dir=f"logs/{self.MODEL_NAME}-{int(time.time())}") if mode == "train" else None
         self.target_update_counter = 0
         self.rewards = []
 
     def create_model(self):
         model = Sequential()
 
-        model.add(Dense(32, input_shape=(self.INPUT_SIZE,), activation="relu"))
+        model.add(Dense(
+            32,
+            input_shape=(self.INPUT_SIZE,),
+            activation="relu",
+            kernel_initializer=initializers.Ones()
+        ))
 
         model.add(Dense(self.HIDDEN_NODES, activation="relu"))
-        model.add(BatchNormalization())
+        # model.add(BatchNormalization())
         model.add(Dropout(0.1))
 
         model.add(Dense(self.OUTPUT_SIZE, activation=self.FINAL_ACTIVATION))  # ACTION_SPACE_SIZE = how many choices (9)
-        model.compile(loss="mse", optimizer=Adam(lr=self.LEARNING_RATE))
+        model.compile(loss="mse", optimizer=Adam(lr=self.LEARNING_RATE), metrics=['mae'])
         return model
 
     def update_replay_memory(self, state, action, reward, new_state, done):
@@ -174,6 +182,11 @@ class DQNAgent:
             action_index = self.get_predicted_action([state])
         actual_action = self.action_map[action_index]
         return action_index, actual_action
+
+    def get_predicted_action(self, sequence):
+        prediction = self.model.predict(np.array(sequence))[0]
+        # print("Prediction", prediction)
+        return np.argmax(prediction)
 
     def construct_memories(self):
         # Get a minibatch of random samples from memory replay table
@@ -234,19 +247,14 @@ class DQNAgent:
             self.target_model.set_weights(self.model.get_weights())
             self.target_update_counter = 0
 
-    def get_predicted_action(self, sequence):
-        prediction = self.model.predict(np.array(sequence))[0]
-        print("Prediction", prediction)
-        return np.argmax(prediction)
-
 
 def init():
     # HYPER PARAMETERS TO SEARCH
     hidden_layer_nodes = np.arange(32, 481, 32)  # 32, 64, 96, 128 ....
     num_episodes = [2500, 5000, 10_000, 20_000]
     replay_memory_size = [1000, 2000, 3000, 5000]
-    final_layer_activation = ["linear", "tanh"]
-    minibatch_sizes = [8, 16, 32, 64]
+    final_layer_activation = ["linear"]
+    minibatch_sizes = [16, 32, 64]
     learning_rates = [1e-2, 1e-3, 1e-4]
 
     for num_episode in num_episodes:
@@ -269,30 +277,28 @@ def learn(nodes=32, num_episodes=1000, memory_size=500, final_act="linear", mini
     episode_rewards = []
     agent = DQNAgent("train", nodes, memory_size, final_act, minibatch, lr)
     interval = 100
-    print("State attributes", env.getGameState().keys())
-    print("All actions", env.getActionSet())
-    for episode in range(1, num_episodes + 1):
+    for episode in tqdm(range(1, num_episodes + 1)):
         agent.tensorboard.step = episode
         done = False
         step = 1
         total_reward = 0.0
         # initial state
         state = np.array(list(env.getGameState().values()))
-        print("State:", state)
+        # print("State:", state)
         while not done:
             if env.game_over():
-                print("GAME OVER!")
+                # print("GAME OVER!")
                 done = True
             action_index, action = agent.select_action(state)
             action_string = 'jump!' if action_index == 1 else 'chill'
-            print("Action:", action, action_string)
+            # print("Action:", action, action_string)
             reward = env.act(action)
-            print("Reward:", reward)
+            # print("Reward:", reward)
             new_state = np.array(list(env.getGameState().values()))
             # update total reward
             total_reward += reward
             # update replay memory
-            agent.update_replay_memory(state, action_index, reward, new_state, done)
+            agent.update_replay_memory(state, action_index, reward, new_state, 1 - int(done))
             # update q_network
             agent.train(done, step)
             # update current state with new state
@@ -302,7 +308,6 @@ def learn(nodes=32, num_episodes=1000, memory_size=500, final_act="linear", mini
         # Append episode rewards to list of all episode rewards
         episode_rewards.append(total_reward)
         can_update = episode % interval
-        print(can_update)
         if not can_update or episode == 1:
             average_reward = np.mean(episode_rewards[-interval:])
             min_reward = np.min(episode_rewards[-interval:])
@@ -339,8 +344,7 @@ def plot_graph(episode_rewards, nodes, memory_size, final_act, minibatch, lr):
     ax.set_ylabel("Reward")
     plt.show()
     plt.savefig(
-        f"graphs/Agent learning curve - hidden_nodes={nodes} mem_size={memory_size}" \
-        f"final_act={final_act} minibatch={minibatch} lr={lr}.png")
+        f"graphs/Agent learning curve - hidden_nodes={nodes} mem_size={memory_size} final_act={final_act} minibatch={minibatch} lr={lr}.png")
     return True
 
 
@@ -351,25 +355,30 @@ def play():
     env.init()
     agent = DQNAgent("play")
     step = 0
+    total_reward = 0
     state = np.array(list(env.getGameState().values()))
     while True:
         if env.game_over():
-            env.reset_game()
+            print("===========================")
+            print("TOTAL REWARD: ", total_reward)
             step = 0
+            total_reward = 0
+            env.reset_game()
 
         action_index, action = agent.select_action(state)
-        action_string = 'jump!' if action_index == 1 else 'chill'
+        # action_string = 'jump!' if action_index == 1 else 'chill'
         reward = env.act(action)
         new_state = np.array(list(env.getGameState().values()))
 
         # PRINT CURRENT STATS
-        print("Current State:", state)
-        print("Action:", action, action_string)
-        print("Reward:", reward)
-        print("New State:", new_state)
+        # print("Current State:", state)
+        # print("Action:", action, action_string)
+        # print("Reward:", reward)
+        # print("New State:", new_state)
 
         state = new_state
         step += 1
+        total_reward += reward
 
 
 if __name__ == "__main__":
