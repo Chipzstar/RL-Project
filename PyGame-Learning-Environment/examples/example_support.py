@@ -11,7 +11,7 @@ import theano.tensor as T
 
 class ExampleAgent():
     """
-        Implements a DQN-ish agent. It has replay memory and epsilon decay. It is missing model freezing. The models are sensitive to the parameters and if applied to other games must be tinkered with.
+        Implements a DQN-ish agent. It has replay memory and epsilon decay. It is missing model freezing. The dqn are sensitive to the parameters and if applied to other games must be tinkered with.
 
     """
 

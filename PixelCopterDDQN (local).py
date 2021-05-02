@@ -1,4 +1,3 @@
-
 # ## **SET UP PYGAME ENVIRONMENT**
 
 # In[ ]:
@@ -23,23 +22,9 @@ import sys
 import time
 from collections import deque
 from tqdm import tqdm
-import matplotlib
-
-os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
-from keras import initializers
-matplotlib.use("Agg")
-import os
 import pickle
-import random
-import platform
-import sys
-import time
-from collections import deque
-from tqdm import tqdm
 
+import matplotlib
 import keras
 import numpy as np
 import pandas as pd
@@ -49,12 +34,11 @@ from keras import Sequential
 from keras.callbacks import TensorBoard
 from keras.layers import Dense, Dropout, Activation
 from keras.optimizers import Adam
+from keras import initializers
 from ple import PLE
 from ple.games.pixelcopter import Pixelcopter
+from matplotlib import pyplot as plt
 from win32api import GetSystemMetrics
-
-GPUS = ["/GPU:0"]
-strategy = tf.distribute.MirroredStrategy(devices=GPUS)
 
 print(f"Tensor Flow Version: {tf.__version__}")
 print(f"Keras Version: {keras.__version__}")
@@ -116,22 +100,20 @@ class ModifiedTensorBoard(TensorBoard):
 
 class DDQNAgent:
     # hyper-parameters
-    # LEARNING_RATE = 1e-3
-    BATCH_SIZE = 32
     INPUT_SIZE = 7
     OUTPUT_SIZE = 2
     EPSILON = 1
     DECAY_RATE = 0.005
     MIN_EPSILON = 0.1
     GAMMA = 0.99
-    # MEMORY_SIZE = 1000
     MIN_MEMORY_SIZE = 100
     UPDATE_TARGET_LIMIT = 5
 
     # based on documentation, state has 7 features
     # output is 2 dimensions, 0 = do nothing, 1 = jump
 
-    def __init__(self, mode="train", nodes=32, memory_size=500, final_act="linear", minibatch=32, lr=1e-3, num_episodes=1000):
+    def __init__(self, mode="train", nodes=32, memory_size=500, final_act="linear", minibatch=32, lr=1e-3,
+                 num_episodes=1000):
         # depending on what mode the agent is in, will determine how the agent chooses actions
         # if agent is training, EPSILON = 1 and will decay over time with epsilon probability of exploring
         # if agent is playing (using trained model), EPSILON = 0 and only choose actions based on Q network
@@ -139,13 +121,11 @@ class DDQNAgent:
         self.MEMORY_SIZE = memory_size
         self.FINAL_ACTIVATION = final_act
         self.MINIBATCH_SIZE = minibatch
-        self.GLOBAL_BATCH_SIZE = minibatch * strategy.num_replicas_in_sync  # TODO
         self.LEARNING_RATE = lr
         self.EPSILON = 1 if mode == "train" else 0
-        self.MODEL_NAME = f"LR={lr} BATCH={minibatch} MEM_SIZE={memory_size} NODES={nodes} ACTIVATION={final_act} NUM_EPISODES={num_episodes}"
+        self.MODEL_NAME = f"model - ({lr} {minibatch} {memory_size} {nodes} {final_act} {num_episodes})"
 
-        with strategy.scope():
-            self.model = self.create_model()
+        self.model = self.create_model()
         print(self.model.summary())
 
         print("Finished building baseline model..")
@@ -167,10 +147,9 @@ class DDQNAgent:
         model = Sequential()
 
         model.add(Dense(
-            32,
+            49,
             input_shape=(self.INPUT_SIZE,),
-            activation="relu",
-            kernel_initializer=initializers.GlorotNormal()
+            activation="relu"
         ))
 
         model.add(Dense(self.HIDDEN_NODES, activation="relu"))
@@ -196,9 +175,14 @@ class DDQNAgent:
         actual_action = self.action_map[action_index]
         return action_index, actual_action
 
+    def get_predicted_action(self, sequence):
+        prediction = self.model.predict(np.array(sequence))[0]
+        # print("Prediction", prediction)
+        return np.argmax(prediction)
+
     def construct_memories_DoubleDQN(self):
         # Step 1: obtain random minibatch from replay memory
-        replay = random.sample(self.replay_memory, self.GLOBAL_BATCH_SIZE)
+        replay = random.sample(self.replay_memory, self.MINIBATCH_SIZE)
         # Get current states from minibatch, then query NN model for Q values
         states = np.array([step[0] for step in replay])
         # Get future states from minibatch, then query NN model for Q values
@@ -207,24 +191,23 @@ class DDQNAgent:
         # selection of action is from model
         # update is from target model
         Q_values = self.model.predict(states)
-        print("Q_values", Q_values.shape)
         Q_next = self.model.predict(next_states)
         Q_target = self.target_model.predict(next_states)
 
         X = []
         Y = []
 
-        for index, (state, action, reward, state_, done) in enumerate(replay):
+        for i, (state, action, reward, state_, done) in enumerate(replay):
             # If not a terminal state, get new q from future states, otherwise set it to 0
             # almost like with Q Learning, but we use just part of equation here
             if not done:
-                max_a = np.argmax(Q_next[index])
-                new_Q = reward + self.GAMMA * Q_target[index][max_a]
+                max_a = np.argmax(Q_next[i])
+                new_Q = reward + self.GAMMA * Q_target[i][max_a]
             else:
                 new_Q = reward
 
             # Update the Q value for given state
-            target = Q_values[index]
+            target = Q_values[i]
             target[action] = new_Q
 
             # Append new values to training data
@@ -233,26 +216,20 @@ class DDQNAgent:
         return np.array(X), np.array(Y)
 
     def train(self, is_terminal, step):
-        if not os.path.isdir('models'):
-            os.makedirs('models')
-        print("Replay size:", len(self.replay_memory))
+        if not os.path.isdir('ddqn'):
+            os.makedirs('ddqn')
         # Start training only if certain number of samples is already saved
         if len(self.replay_memory) < self.MIN_MEMORY_SIZE:
             return
 
         # constructs training data for training of the neural network
         X, y = self.construct_memories_DoubleDQN()
-        print(X.shape, y.shape)
-
-        train_data = tf.data.Dataset.from_tensor_slices((X, y))
-        options = tf.data.Options()
-        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-        train_data = train_data.with_options(options)
-        train_data = train_data.batch(self.GLOBAL_BATCH_SIZE)
 
         if is_terminal:
             self.model.fit(
-                train_data,
+                np.array(X),
+                np.array(y),
+                batch_size=self.MINIBATCH_SIZE,
                 verbose=1,
                 shuffle=False,
                 callbacks=[self.tensorboard]
@@ -263,16 +240,12 @@ class DDQNAgent:
         if self.target_update_counter > self.UPDATE_TARGET_LIMIT:
             self.target_model.set_weights(self.model.get_weights())
             self.target_update_counter = 0
-        sys.exit(0)
-
-    def get_predicted_action(self, sequence):
-        prediction = self.model.predict(np.array(sequence))[0]
-        # print("Prediction", prediction)
-        return np.argmax(prediction)
 
 
-def main(nodes=32, num_episodes=1000, memory_size=500, final_act="linear", minibatch=32, lr=1e-3):
-    game = Pixelcopter(width=480, height=480)
+def main(num_episodes=1000, nodes=32, memory_size=500, final_act="linear", minibatch=32, lr=1e-3):
+    print(f"LEARNING PARAMS: nodes={nodes} num_episodes={num_episodes} memory_size={memory_size} " \
+          f"final_act={final_act} batch={minibatch} lr={lr}")
+    game = Pixelcopter(width=250, height=250)
     env = PLE(game, fps=30, display_screen=True, force_fps=True)
     env.init()
     episode_rewards = []
@@ -280,7 +253,10 @@ def main(nodes=32, num_episodes=1000, memory_size=500, final_act="linear", minib
     interval = 50
     print("State attributes", env.getGameState().keys())
     print("All actions", env.getActionSet())
-    for episode in tqdm(range(1, num_episodes+1)):
+    # Save model, but only when min reward is greater or equal a set value
+    if not os.path.isdir(os.path.join(os.getcwd(), f"ddqn/{agent.MODEL_NAME}")):
+        os.mkdir(os.path.join(os.getcwd(), f"ddqn/{agent.MODEL_NAME}"))
+    for episode in range(1, num_episodes + 1):
         print("Episode : ", episode)
         agent.tensorboard.step = episode
         done = False
@@ -288,10 +264,11 @@ def main(nodes=32, num_episodes=1000, memory_size=500, final_act="linear", minib
         total_reward = 0.0
         # initial state
         state = np.array(list(env.getGameState().values()))
-        # print("State:", state)
+        print("State:", state)
         while not done:
             if env.game_over():
                 print("GAME OVER!")
+                print("Total reward:", total_reward)
                 done = True
             action_index, action = agent.select_action(state)
             action_string = 'jump!' if action_index == 1 else 'chill'
@@ -311,21 +288,40 @@ def main(nodes=32, num_episodes=1000, memory_size=500, final_act="linear", minib
             step += 1
         # Append episode rewards to list of all episode rewards
         episode_rewards.append(total_reward)
-        canUpdate = episode % interval
-        if not canUpdate or episode == 1:
+        # perform update only if a new max. reward was obtained after an episode
+        can_update = episode_rewards[-1] == np.max(episode_rewards)
+        if can_update or episode == 1:
             average_reward = np.mean(episode_rewards[-interval:])
             min_reward = np.min(episode_rewards[-interval:])
             max_reward = np.max(episode_rewards[-interval:])
-            agent.tensorboard.update_stats(reward_avg=average_reward, reward_min=min_reward, reward_max=max_reward, epsilon=agent.EPSILON)
-
+            agent.tensorboard.update_stats(
+                reward_avg=average_reward,
+                reward_min=min_reward,
+                reward_max=max_reward,
+                epsilon=agent.EPSILON
+            )
             # Save model, but only when min reward is greater or equal a set value
-            agent.model.save(f'models/{agent.MODEL_NAME}/DDQN_{max_reward:_>7.2f}max_{average_reward:_>7.2f}avg_{min_reward:_>7.2f}min__{int(time.time())}.model')
+            agent.model.save(
+                f'ddqn/{agent.MODEL_NAME}/{agent.MODEL_NAME}__{max_reward:_>7.2f}max_{average_reward:_>7.2f} avg_{min_reward:_>7.2f}min.h5')
         # Decay epsilon
         if agent.EPSILON > agent.MIN_EPSILON:
             agent.EPSILON *= agent.DECAY_RATE
             # ensure epsilon does not subside below minimum value
             agent.EPSILON = max(agent.MIN_EPSILON, agent.EPSILON)
         env.reset_game()
+    plot_graph(episode_rewards, num_episodes, nodes, memory_size, final_act, minibatch, lr)
+
+
+def plot_graph(episode_rewards, num_episodes, nodes, memory_size, final_act, minibatch, lr):
+    fig, ax = plt.subplots(nrows=1, figsize=(12, 15))
+    episodes = np.arange(1, len(episode_rewards) + 1)
+    ax.plot(episodes, episode_rewards)
+    ax.set_title(f"DDQN agent Learning Curve - ({num_episodes} {nodes} {memory_size} {minibatch} {final_act} {lr})")
+    ax.set_xlabel("Number of episodes")
+    ax.set_ylabel("Total Reward")
+    plt.savefig(
+        f"ddqn/graphs/DDQN Agent learning curve - num_episodes={num_episodes} hidden_nodes={nodes} mem_size={memory_size} final_act={final_act} minibatch={minibatch} lr={lr}.png")
+    return True
 
 
 def init():
@@ -343,8 +339,10 @@ def init():
                 for mem_size in replay_memory_size:
                     for minibatch in minibatch_sizes:
                         for final_act in final_layer_activation:
-                            main(nodes, num_episode, mem_size, final_act, minibatch, lr)
+                            main(num_episode, nodes, mem_size, final_act, minibatch, lr)
 
 
 if __name__ == "__main__":
-    init()
+    # init()
+    # pass in specific params to function, otherwise uses default ones
+    main(num_episodes=100)

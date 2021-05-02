@@ -215,6 +215,7 @@ class Pixelcopter(PyGameWrapper):
         self.block_num = 0
         self.score = 0.0
         self.lives = 1.0
+        self.hasWon = False
 
         self.player = HelicopterPlayer(
             self.speed,
@@ -338,8 +339,8 @@ class Pixelcopter(PyGameWrapper):
                     # increment block num to add next block in list
                     self.block_num += 1
                 else:
-                    # repeat blocks after copter passes all set blocks
-                    self.block_num = 0
+                    # set hasWon flag to true
+                    self.hasWon = True
 
             if b.pos.x <= -b.width:
                 b.kill()
@@ -360,6 +361,12 @@ class Pixelcopter(PyGameWrapper):
 
         if self.lives <= 0.0:
             self.score += self.rewards["loss"]
+
+        if self.hasWon:
+            # player has completed the game
+            self.score += self.rewards["win"]
+            # set lives to 0 to change game state to "game over"
+            self.lives == 0
 
         self.player_group.draw(self.screen)
         self.block_group.draw(self.screen)
