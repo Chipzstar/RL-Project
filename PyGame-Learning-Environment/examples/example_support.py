@@ -207,8 +207,8 @@ def loop_play_forever(env, agent):
                 reward, action = agent.act(state, epsilon=0.05)
                 episode_reward += reward
 
-            print "Agent score {:0.1f} reward for episode.".format(episode_reward)
+            print("Agent score {:0.1f} reward for episode.".format(episode_reward))
             agent.end_episode()
 
     except KeyboardInterrupt:
-        print "Exiting out!"
+        print("Exiting out!")

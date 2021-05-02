@@ -26,4 +26,4 @@ for i in range(1000):
     action = actions[np.random.randint(0, len(actions))]  # random actions
     reward = p.act(action)
 
-    print "Score: {:0.3f} | Reward: {:0.3f} ".format(p.score(), reward)
+    print("Score: {:0.3f} | Reward: {:0.3f} ".format(p.score(), reward))

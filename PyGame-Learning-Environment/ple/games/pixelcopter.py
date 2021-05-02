@@ -212,6 +212,7 @@ class Pixelcopter(PyGameWrapper):
         return self.lives <= 0.0
 
     def init(self):
+        self.block_num = 0
         self.score = 0.0
         self.lives = 1.0
 
@@ -225,10 +226,34 @@ class Pixelcopter(PyGameWrapper):
         self.player_group.add(self.player)
 
         self.block_group = pygame.sprite.Group()
-        self._add_blocks()
+        self.block_x_pos = [297, 291, 343, 300, 348, 321, 265, 313, 300, 320, 322, 321, 321, 359, 291, 260, 335,
+                            342, 307, 352, 285, 339, 332, 301, 348, 367, 283, 253, 327, 350, 262, 325, 339, 255,
+                            328, 291, 265, 297, 319, 272, 287, 330, 257, 304, 355, 339, 360, 296, 373, 256]
+        self.block_y_pos = [92, 115, 124, 116, 116, 68, 92, 96, 118, 96, 111, 130, 101, 106, 99, 85, 82, 128,
+                            89, 86, 92, 116, 115, 76, 65, 78, 65, 72, 97, 123, 117, 76, 115, 81, 95, 77, 121,
+                            122, 118, 99, 122, 77, 128, 129, 135, 123, 100, 85, 83, 86]
+        # self.block_x_pos = [self.rng.randint(self.width, int(self.width * 1.5)) for i in range(50)]
+        # self.block_y_pos = [self.rng.randint(int(self.height * 0.25), int(self.height * 0.55)) for i in range(50)]
+        self._add_blocks_fixed(self.block_x_pos[self.block_num], self.block_y_pos[self.block_num])
+        self.block_num += 1
 
         self.terrain_group = pygame.sprite.Group()
-        self._add_terrain(0, self.width * 4)
+        # y_pos = self._add_terrain(0, self.width * 4)
+        y_pos = [147, 159, 159, 146, 120, 100, 96, 98, 115, 135, 153, 159, 146, 132, 115, 97, 97, 110, 135, 152, 158,
+                 155, 138, 112, 99, 96, 105, 123, 138, 156, 157, 143, 127, 105, 96, 101, 115, 140, 149, 159, 152]
+        # fixed map
+        self._add_terrain_fixed(y_pos, 0, self.width * 4)
+
+    def _add_terrain_fixed(self, y_pos, start, end):
+        w = int(self.width * 0.1)
+        steps = range(start + int(w / 2), end + int(w / 2), w)
+        for i in range(0, len(steps)):
+            self.terrain_group.add(Terrain(
+                (steps[i], y_pos[i]),
+                self.speed,
+                self.width,
+                self.height
+            ))
 
     def _add_terrain(self, start, end):
         w = int(self.width * 0.1)
@@ -253,11 +278,21 @@ class Pixelcopter(PyGameWrapper):
             )
             )
 
+    def _add_blocks_fixed(self, x_pos, y_pos):
+        self.block_group.add(
+            Block(
+                (x_pos, y_pos),
+                self.speed,
+                self.width,
+                self.height
+            )
+        )
+
     def _add_blocks(self):
         x_pos = self.rng.randint(self.width, int(self.width * 1.5))
         y_pos = self.rng.randint(
             int(self.height * 0.25),
-            int(self.height * 0.75)
+            int(self.height * 0.55)
         )
         self.block_group.add(
             Block(
@@ -272,7 +307,6 @@ class Pixelcopter(PyGameWrapper):
         self.init()
 
     def step(self, dt):
-
         self.screen.fill((0, 0, 0))
         self._handle_player_events()
 
@@ -299,7 +333,13 @@ class Pixelcopter(PyGameWrapper):
         for b in self.block_group:
             if b.pos.x <= self.player.pos.x and len(self.block_group) == 1:
                 self.score += self.rewards["positive"]
-                self._add_blocks()
+                self._add_blocks_fixed(self.block_x_pos[self.block_num], self.block_y_pos[self.block_num])
+                if self.block_num < len(self.block_x_pos):
+                    # increment block num to add next block in list
+                    self.block_num += 1
+                else:
+                    # repeat blocks after copter passes all set blocks
+                    self.block_num = 0
 
             if b.pos.x <= -b.width:
                 b.kill()
@@ -315,8 +355,7 @@ class Pixelcopter(PyGameWrapper):
         if self.player.pos.y > self.height * 0.875:  # its below the lowest possible block
             self.lives -= 1
 
-        if len(self.terrain_group) <= (
-                10 + 3):  # 10% per terrain, offset of ~2 with 1 extra
+        if len(self.terrain_group) <= (10 + 3):  # 10% per terrain, offset of ~2 with 1 extra
             self._add_terrain(self.width, self.width * 5)
 
         if self.lives <= 0.0:
@@ -328,7 +367,6 @@ class Pixelcopter(PyGameWrapper):
 
 if __name__ == "__main__":
     import numpy as np
-
     pygame.init()
     game = Pixelcopter(width=256, height=256)
     game.screen = pygame.display.set_mode(game.getScreenDims(), 0, 32)

@@ -1,0 +1,15 @@
+matplotlib==3.3.4
+tensorflow==2.3.0
+tensorflow-gpu==2.3.0
+pygame==2.0.1
+tqdm==4.59.0
+Keras==2.4.3
+pandas==1.2.3
+numpy==1.19.5
+mock==4.0.3
+nose==1.3.7
+Pillow==8.2.0
+scikit_learn==0.24.2
+sphinx_rtd_theme==0.5.2
+theano==1.0.5
+ple = {editable = true, file = "file:///mnt/seaweed/homes/cjo37/Project/PyGame-Learning-Environment"}
