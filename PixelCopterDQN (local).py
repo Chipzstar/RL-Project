@@ -136,7 +136,7 @@ class DQNAgent:
         if mode == "train":
             self.model = self.create_model()
         else:
-            self.model = tf.keras.models.load_model(self.MODEL_FILE)
+            self.model = keras.models.load_model(self.MODEL_FILE)
         print(self.model.summary())
         print("Finished building baseline model..")
         self.action_map = {
@@ -144,7 +144,7 @@ class DQNAgent:
             1: 119
         }
         # Target model this is what we predict against every step
-        self.target_model = self.create_model() if mode == "train" else tf.keras.models.load_model(self.MODEL_FILE)
+        self.target_model = self.create_model() if mode == "train" else keras.models.load_model(self.MODEL_FILE)
         print("Finished building target model..")
         self.target_model.set_weights(self.model.get_weights())
         self.replay_memory = deque(maxlen=self.MEMORY_SIZE)

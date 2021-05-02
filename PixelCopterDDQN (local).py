@@ -108,11 +108,13 @@ class DDQNAgent:
     GAMMA = 0.99
     MIN_MEMORY_SIZE = 100
     UPDATE_TARGET_LIMIT = 5
+    LOAD_MODEL = None  # to test a model replace here with path to best model e.g. LOAD_MODEL = "ddqn/best/DDQN___61.00max____6.66avg___-4.50min_model.h5"
+    # LOAD_MODEL = "ddqn/best/DDQN___61.00max____6.66avg___-4.50min_model.h5"
 
     # based on documentation, state has 7 features
     # output is 2 dimensions, 0 = do nothing, 1 = jump
 
-    def __init__(self, mode="train", nodes=32, memory_size=500, final_act="linear", minibatch=32, lr=1e-3,
+    def __init__(self, nodes=32, memory_size=500, final_act="linear", minibatch=32, lr=1e-3,
                  num_episodes=1000):
         # depending on what mode the agent is in, will determine how the agent chooses actions
         # if agent is training, EPSILON = 1 and will decay over time with epsilon probability of exploring
@@ -122,13 +124,10 @@ class DDQNAgent:
         self.FINAL_ACTIVATION = final_act
         self.MINIBATCH_SIZE = minibatch
         self.LEARNING_RATE = lr
-        self.EPSILON = 1 if mode == "train" else 0
         self.MODEL_NAME = f"model - ({lr} {minibatch} {memory_size} {nodes} {final_act} {num_episodes})"
 
         self.model = self.create_model()
         print(self.model.summary())
-
-        print("Finished building baseline model..")
         self.action_map = {
             0: None,
             1: 119
@@ -144,20 +143,25 @@ class DDQNAgent:
         self.rewards = []
 
     def create_model(self):
-        model = Sequential()
+        if self.LOAD_MODEL:
+            print("Loading model...")
+            model = keras.models.load_model(self.LOAD_MODEL)
+        else:
+            model = Sequential()
 
-        model.add(Dense(
-            49,
-            input_shape=(self.INPUT_SIZE,),
-            activation="relu"
-        ))
+            model.add(Dense(
+                49,
+                input_shape=(self.INPUT_SIZE,),
+                activation="relu"
+            ))
 
-        model.add(Dense(self.HIDDEN_NODES, activation="relu"))
-        # model.add(BatchNormalization())
-        model.add(Dropout(0.1))
+            model.add(Dense(self.HIDDEN_NODES, activation="relu"))
+            # model.add(BatchNormalization())
+            model.add(Dropout(0.1))
 
-        model.add(Dense(self.OUTPUT_SIZE, activation=self.FINAL_ACTIVATION))  # OUTPUT_SIZE = how many actions (2)
-        model.compile(loss="mse", optimizer=Adam(lr=self.LEARNING_RATE), metrics=['mae'])
+            model.add(Dense(self.OUTPUT_SIZE, activation=self.FINAL_ACTIVATION))  # OUTPUT_SIZE = how many actions (2)
+            model.compile(loss="mse", optimizer=Adam(lr=self.LEARNING_RATE), metrics=['mae'])
+            print("Finished building baseline model..")
         return model
 
     def update_replay_memory(self, state, action, reward, new_state, done):
@@ -249,7 +253,7 @@ def main(num_episodes=1000, nodes=32, memory_size=500, final_act="linear", minib
     env = PLE(game, fps=30, display_screen=True, force_fps=True)
     env.init()
     episode_rewards = []
-    agent = DDQNAgent("train", nodes=32, num_episodes=1000, memory_size=500, final_act="linear", minibatch=32, lr=1e-3)
+    agent = DDQNAgent(nodes=32, num_episodes=1000, memory_size=500, final_act="linear", minibatch=32, lr=1e-3)
     interval = 50
     print("State attributes", env.getGameState().keys())
     print("All actions", env.getActionSet())
