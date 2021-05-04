@@ -49,6 +49,7 @@ print(f"Scikit-Learn {sk.__version__}")
 gpu = len(tf.config.list_physical_devices('GPU')) > 0
 print("GPU is", "available" if gpu else "NOT AVAILABLE")
 
+
 # Sets the initial window position of the game
 # WIDTH = GetSystemMetrics(0)
 # HEIGHT = GetSystemMetrics(1)
@@ -98,6 +99,43 @@ class ModifiedTensorBoard(TensorBoard):
                 self.writer.flush()
 
 
+class PrioritizedReplayBuffer:
+    def __init__(self, maxlen=5000):
+        self.buffer = deque(maxlen=maxlen)
+        self.priorities = deque(maxlen=maxlen)
+
+    def __len__(self):
+        return len(self.buffer)
+
+    def __getitem__(self, index):
+        return self.buffer[index]
+
+    def add(self, experience):
+        self.buffer.append(experience)
+        self.priorities.append(max(self.priorities, default=1))
+
+    def get_probabilities(self, priority_scale):
+        scaled_priorities = np.array(self.priorities) ** priority_scale
+        sample_probabilities = scaled_priorities / sum(scaled_priorities)
+        return sample_probabilities
+
+    def get_importance_weights(self, probabilities):
+        importance = 1 / len(self.buffer) * 1 / probabilities
+        importance_normalized = importance / max(importance)
+        return importance_normalized
+
+    def sample(self, batch_size, priority_scale=0.1):
+        sample_probs = self.get_probabilities(priority_scale)
+        sample_indices = random.choices(range(len(self.buffer)), k=batch_size, weights=sample_probs)
+        samples = np.array(self.buffer, dtype=object)[sample_indices]
+        importance_weights = self.get_importance_weights(sample_probs[sample_indices])
+        return map(list, zip(*samples)), importance_weights, sample_indices
+
+    def set_priorities(self, indices, errors, offset=0.1):
+        for i, e in zip(indices, errors):
+            self.priorities[i] = abs(e) + offset
+
+
 class DDQNAgent:
     # hyper-parameters
     INPUT_SIZE = 7
@@ -111,7 +149,7 @@ class DDQNAgent:
     # based on documentation, state has 7 features
     # output is 2 dimensions, 0 = do nothing, 1 = jump
 
-    def __init__(self, mode="train", nodes=32, memory_size=500, final_act="linear", minibatch=32, lr=1e-3,
+    def __init__(self, mode="train", nodes=32, memory_size=10000, final_act="linear", minibatch=32, lr=1e-3,
                  num_episodes=1000):
         # depending on what mode the agent is in, will determine how the agent chooses actions
         # if agent is training, EPSILON = 1 and will decay over time with epsilon probability of exploring
@@ -123,7 +161,7 @@ class DDQNAgent:
         self.MINIBATCH_SIZE = minibatch
         self.LEARNING_RATE = lr
         self.MODEL_NAME = f"model - ({lr} {minibatch} {memory_size} {nodes} {final_act} {num_episodes})"
-        self.LOAD_MODEL = "ddqn/best/model - (0.01 64 10000 49 linear 5000)____49.39max____9.64 avg___-0.62min.h5"
+        self.LOAD_MODEL = "ddqn/best/model - (0.01 64 10000 49 linear 5000)____50.45max____7.99 avg___-1.67min.h5"
         # Set to LOAD_MODEL to NONE to train from scratch
 
         self.model = self.create_model(self.LOAD_MODEL)
@@ -137,10 +175,10 @@ class DDQNAgent:
         print("Finished building target model..")
         self.target_model.set_weights(self.model.get_weights())
 
-        self.replay_memory = deque(maxlen=self.MEMORY_SIZE)
+        self.replay_buffer = PrioritizedReplayBuffer(maxlen=memory_size)
         self.tensorboard = ModifiedTensorBoard(log_dir=f"logs/{self.MODEL_NAME}-{int(time.time())}")
         self.target_update_counter = 0
-        self.rewards = []
+        self.errors = []
 
     def create_model(self, model_file):
         if model_file:
@@ -166,9 +204,7 @@ class DDQNAgent:
         return model
 
     def update_replay_memory(self, state, action, reward, new_state, done):
-        self.replay_memory.append((state, action, reward, new_state, done))
-        if len(self.replay_memory) > self.MEMORY_SIZE:
-            self.replay_memory.popleft()
+        self.replay_buffer.add((state, action, reward, new_state, done))
 
     def select_action(self, state):
         # chose random action with probability epsilon
@@ -187,61 +223,78 @@ class DDQNAgent:
         # print("Prediction", prediction)
         return np.argmax(prediction)
 
-    def construct_memories_DoubleDQN(self):
-        # Step 1: obtain random minibatch from replay memory
-        replay = random.sample(self.replay_memory, self.MINIBATCH_SIZE)
-        # Get current states from minibatch, then query NN model for Q values
-        states = np.array([step[0] for step in replay])
-        # Get future states from minibatch, then query NN model for Q values
-        next_states = np.array([step[3] for step in replay])
-        next_action = np.argmax(next_states)
+    def get_qs(self, state):
+        return self.model.predict(np.array(state))
+
+    def construct_memories_DoubleDQN(self, states, actions, rewards, next_states, dones):
         # selection of action is from model
-        # update is from target model
-        Q_values = self.model.predict(states)
-        Q_next = self.model.predict(next_states)
-        Q_target = self.target_model.predict(next_states)
+        # update is from target
+        Q_values = self.model.predict(np.array(states))
+        Q_next = self.model.predict(np.array(next_states))
+        Q_target = self.target_model.predict(np.array(next_states))
 
         X = []
         Y = []
 
-        for i, (state, action, reward, state_, done) in enumerate(replay):
+        for i in range(self.MINIBATCH_SIZE):
             # If not a terminal state, get new q from future states, otherwise set it to 0
             # almost like with Q Learning, but we use just part of equation here
-            if not done:
+            if not dones[i]:
                 max_a = np.argmax(Q_next[i])
-                new_Q = reward + self.GAMMA * Q_target[i][max_a]
+                new_Q = rewards[i] + self.GAMMA * Q_target[i][max_a]
             else:
-                new_Q = reward
+                new_Q = rewards[i]
 
             # Update the Q value for given state
             target = Q_values[i]
-            target[action] = new_Q
+            target[actions[i]] = new_Q
 
             # Append new values to training data
-            X.append(state)
+            X.append(states[i])
             Y.append(target)
         return np.array(X), np.array(Y)
+
+    def calculate_errors(self, transitions):
+        # print(transitions[0])
+        errors = []
+        for s, a, r, s_, done in transitions:
+            # Q value of sample
+            state = np.array([s])
+            Q = self.model.predict(state)[0][a]
+            # T(S) = target value of sample
+            next_state = np.array([s_])
+            next_Q = self.target_model.predict(next_state)[0][a]
+            T = r + self.GAMMA * next_Q
+            errors.append(abs(Q - T))
+        return np.array(errors)
 
     def train(self, is_terminal, step):
         if not os.path.isdir('ddqn'):
             os.makedirs('ddqn')
         # Start training only if certain number of samples is already saved
-        if len(self.replay_memory) < self.MIN_MEMORY_SIZE:
+
+        if len(self.replay_buffer) < self.MIN_MEMORY_SIZE:
             return
 
+        # Step 1: obtain random minibatch from replay memory
+        (states, actions, rewards, next_states, dones), importance_weights, indices = self.replay_buffer.sample(
+            self.MINIBATCH_SIZE)
         # constructs training data for training of the neural network
-        X, y = self.construct_memories_DoubleDQN()
+        X, y, = self.construct_memories_DoubleDQN(states, actions, rewards, next_states, dones)
 
         if is_terminal:
             self.model.fit(
                 X,
                 y,
+                sample_weight=importance_weights,
                 batch_size=self.MINIBATCH_SIZE,
                 verbose=1,
                 shuffle=False,
                 callbacks=[self.tensorboard]
             )
             self.target_update_counter += 1
+            errors = self.calculate_errors(list(zip(states, actions, rewards, next_states, dones)))
+            self.replay_buffer.set_priorities(indices, errors)
 
         # If counter reaches a set value, update the target network with weights of main network
         if self.target_update_counter >= self.UPDATE_TARGET_LIMIT:
@@ -249,7 +302,7 @@ class DDQNAgent:
             self.target_update_counter = 0
 
 
-def main(num_episodes=1000, nodes=32, memory_size=10_000, final_act="linear", minibatch=32, lr=1e-3):
+def main(num_episodes=2000, nodes=32, memory_size=10_000, final_act="linear", minibatch=32, lr=1e-3):
     print(f"LEARNING PARAMS: nodes={nodes} num_episodes={num_episodes} memory_size={memory_size} " \
           f"final_act={final_act} batch={minibatch} lr={lr}")
     game = Pixelcopter(width=250, height=250)
@@ -336,7 +389,7 @@ def plot_graph(episode_rewards, num_episodes, nodes, memory_size, final_act, min
 # run the game using best DQN model
 def play():
     game = Pixelcopter(width=250, height=250)
-    env = PLE(game, fps=30, display_screen=True, force_fps=True)
+    env = PLE(game, fps=30, display_screen=True)
     env.init()
     agent = DDQNAgent("play")
     step = 0
@@ -387,4 +440,5 @@ def init():
 if __name__ == "__main__":
     # init()
     # pass in specific params to function, otherwise uses default ones
-    main(num_episodes=5000, nodes=49, minibatch=32, lr=1e-2)
+    main(num_episodes=5000, memory_size=10_000, nodes=49, minibatch=32, lr=1e-2)
+    # play()
