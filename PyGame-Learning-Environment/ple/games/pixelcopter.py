@@ -227,12 +227,8 @@ class Pixelcopter(PyGameWrapper):
         self.player_group.add(self.player)
 
         self.block_group = pygame.sprite.Group()
-        self.block_x_pos = [297, 291, 343, 300, 348, 321, 265, 313, 300, 320, 322, 321, 321, 359, 291, 260, 335,
-                            342, 307, 352, 285, 339, 332, 301, 348, 367, 283, 253, 327, 350, 262, 325, 339, 255,
-                            328, 291, 265, 297, 319, 272, 287, 330, 257, 304, 355, 339, 360, 296, 373, 256]
-        self.block_y_pos = [92, 115, 124, 116, 116, 68, 92, 96, 118, 96, 111, 130, 101, 106, 99, 85, 82, 128,
-                            89, 86, 92, 116, 115, 76, 65, 78, 65, 72, 97, 123, 117, 76, 115, 81, 95, 77, 121,
-                            122, 118, 99, 122, 77, 128, 129, 135, 123, 100, 85, 83, 86]
+        self.block_x_pos = [297, 291, 343, 300, 348, 321, 265, 313, 300, 320, 322]
+        self.block_y_pos = [92, 115, 124, 95, 116, 68, 92, 96, 118, 96, 111]
         # self.block_x_pos = [self.rng.randint(self.width, int(self.width * 1.5)) for i in range(50)]
         # self.block_y_pos = [self.rng.randint(int(self.height * 0.25), int(self.height * 0.55)) for i in range(50)]
         self._add_blocks_fixed(self.block_x_pos[self.block_num], self.block_y_pos[self.block_num])
@@ -241,7 +237,10 @@ class Pixelcopter(PyGameWrapper):
         self.terrain_group = pygame.sprite.Group()
         # y_pos = self._add_terrain(0, self.width * 4)
         y_pos = [147, 159, 159, 146, 120, 100, 96, 98, 115, 135, 153, 159, 146, 132, 115, 97, 97, 110, 135, 152, 158,
-                 155, 138, 112, 99, 96, 105, 123, 138, 156, 157, 143, 127, 105, 96, 101, 115, 140, 149, 159, 152]
+                 155, 138, 112, 99, 96, 105, 123, 138, 156, 157, 143, 127, 105, 96, 101, 115, 140, 149, 159, 152,
+                 147, 159, 159, 146, 120, 100, 96, 98, 115, 135, 153, 159, 146, 132, 115, 97, 97, 110, 135, 152, 158,
+                 155, 138, 112, 99, 96, 105, 123, 138, 156, 157, 143, 127, 105, 96, 101, 115, 140, 149, 159, 152, 119,
+                 102, 136, 102, 144, 141, 144, 148, 144, 139, 112, 111, 103, 149, 158, 111, 113, 112, 154, 137]
         # fixed map
         self._add_terrain_fixed(y_pos, 0, self.width * 4)
 
@@ -365,12 +364,14 @@ class Pixelcopter(PyGameWrapper):
         if self.hasWon:
             # player has completed the game
             self.score += self.rewards["win"]
+            print("YOU WIN!")
             # set lives to 0 to change game state to "game over"
             self.lives == 0
 
         self.player_group.draw(self.screen)
         self.block_group.draw(self.screen)
         self.terrain_group.draw(self.screen)
+
 
 if __name__ == "__main__":
     import numpy as np

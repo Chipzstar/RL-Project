@@ -144,7 +144,7 @@ class DDQNAgent:
     MIN_EPSILON = 0.05
     GAMMA = 0.99
     MIN_MEMORY_SIZE = 1000
-    UPDATE_TARGET_LIMIT = 2
+    UPDATE_TARGET_LIMIT = 3
 
     # based on documentation, state has 7 features
     # output is 2 dimensions, 0 = do nothing, 1 = jump
@@ -154,14 +154,14 @@ class DDQNAgent:
         # depending on what mode the agent is in, will determine how the agent chooses actions
         # if agent is training, EPSILON = 1 and will decay over time with epsilon probability of exploring
         # if agent is playing (using trained model), EPSILON = 0 and only choose actions based on Q network
-        self.DECAY_RATE = 1 / num_episodes
+        self.DECAY_RATE = 5 / num_episodes
         self.HIDDEN_NODES = nodes
         self.MEMORY_SIZE = memory_size
         self.FINAL_ACTIVATION = final_act
         self.MINIBATCH_SIZE = minibatch
         self.LEARNING_RATE = lr
         self.MODEL_NAME = f"model - ({lr} {minibatch} {memory_size} {nodes} {final_act} {num_episodes})"
-        self.LOAD_MODEL = "ddqn/best/model - (0.01 64 10000 49 linear 5000)____50.45max____7.99 avg___-1.67min.h5"
+        self.LOAD_MODEL = "per/best/model - (0.01 128 10000 49 linear 5000)____91.97max___30.01 avg___-1.67min.h5"
         # Set to LOAD_MODEL to NONE to train from scratch
 
         self.model = self.create_model(self.LOAD_MODEL)
@@ -184,7 +184,7 @@ class DDQNAgent:
         if model_file:
             print("Loading model...")
             model = keras.models.load_model(model_file)
-            self.EPSILON = 0.05
+            self.EPSILON = 0
         else:
             model = Sequential()
 
@@ -195,7 +195,6 @@ class DDQNAgent:
             ))
 
             model.add(Dense(self.HIDDEN_NODES, activation="relu"))
-            # model.add(BatchNormalization())
             model.add(Dropout(0.1))
 
             model.add(Dense(self.OUTPUT_SIZE, activation=self.FINAL_ACTIVATION))  # OUTPUT_SIZE = how many actions (2)
@@ -210,7 +209,7 @@ class DDQNAgent:
         # chose random action with probability epsilon
         if np.random.uniform() < self.EPSILON:
             # to speed up training give higher probability to action 0 (no jump)
-            action_index = np.random.choice([0, 1], size=1, p=[0.8, 0.2])[0]
+            action_index = np.random.choice([0, 1], size=1, p=[0.75, 0.25])[0]
             # action_index = np.random.randint(self.OUTPUT_SIZE)
         # otherwise chose epsilon-greedy action from neural net
         else:
@@ -226,7 +225,7 @@ class DDQNAgent:
     def get_qs(self, state):
         return self.model.predict(np.array(state))
 
-    def construct_memories_DoubleDQN(self, states, actions, rewards, next_states, dones):
+    def construct_memories_double_dqn(self, states, actions, rewards, next_states, dones):
         # selection of action is from model
         # update is from target
         Q_values = self.model.predict(np.array(states))
@@ -269,8 +268,8 @@ class DDQNAgent:
         return np.array(errors)
 
     def train(self, is_terminal, step):
-        if not os.path.isdir('ddqn'):
-            os.makedirs('ddqn')
+        if not os.path.isdir('per'):
+            os.makedirs('per')
         # Start training only if certain number of samples is already saved
 
         if len(self.replay_buffer) < self.MIN_MEMORY_SIZE:
@@ -280,7 +279,7 @@ class DDQNAgent:
         (states, actions, rewards, next_states, dones), importance_weights, indices = self.replay_buffer.sample(
             self.MINIBATCH_SIZE)
         # constructs training data for training of the neural network
-        X, y, = self.construct_memories_DoubleDQN(states, actions, rewards, next_states, dones)
+        X, y, = self.construct_memories_double_dqn(states, actions, rewards, next_states, dones)
 
         if is_terminal:
             self.model.fit(
@@ -363,7 +362,7 @@ def main(num_episodes=2000, nodes=32, memory_size=10_000, final_act="linear", mi
             )
             # Save model, but only when min reward is greater or equal a set value
             agent.model.save(
-                f'ddqn/{agent.MODEL_NAME}/{agent.MODEL_NAME}__{max_reward:_>7.2f}max_{average_reward:_>7.2f} avg_{min_reward:_>7.2f}min.h5')
+                f'per/{agent.MODEL_NAME}/{agent.MODEL_NAME}__{max_reward:_>7.2f}max_{average_reward:_>7.2f} avg_{min_reward:_>7.2f}min.h5')
         # Decay epsilon
         if agent.EPSILON > agent.MIN_EPSILON:
             agent.EPSILON -= agent.DECAY_RATE
@@ -375,14 +374,16 @@ def main(num_episodes=2000, nodes=32, memory_size=10_000, final_act="linear", mi
 
 
 def plot_graph(episode_rewards, num_episodes, nodes, memory_size, final_act, minibatch, lr):
+    if not os.path.isdir(os.path.join(os.getcwd(), f"per/graphs")):
+        os.mkdir(os.path.join(os.getcwd(), f"per/graphs"))
     fig, ax = plt.subplots(nrows=1, figsize=(12, 15))
     episodes = np.arange(1, len(episode_rewards) + 1)
     ax.plot(episodes, episode_rewards)
-    ax.set_title(f"DDQN agent Learning Curve - ({num_episodes} {nodes} {memory_size} {minibatch} {final_act} {lr})")
+    ax.set_title(f"PERDDQN agent Learning Curve - ({num_episodes} {nodes} {memory_size} {minibatch} {final_act} {lr})")
     ax.set_xlabel("Number of episodes")
     ax.set_ylabel("Total Reward")
     plt.savefig(
-        f"ddqn/graphs/DDQN Agent learning curve - num_episodes={num_episodes} hidden_nodes={nodes} mem_size={memory_size} final_act={final_act} minibatch={minibatch} lr={lr}.png")
+        f"per/graphs/PERDDQN Agent learning curve - num_episodes={num_episodes} hidden_nodes={nodes} mem_size={memory_size} final_act={final_act} minibatch={minibatch} lr={lr}.png")
     return True
 
 
@@ -407,38 +408,12 @@ def play():
         # action_string = 'jump!' if action_index == 1 else 'chill'
         reward = env.act(action)
         new_state = np.array(list(env.getGameState().values()))
-
-        # PRINT CURRENT STATS
-        # print("Current State:", state)
-        # print("Action:", action, action_string)
-        # print("Reward:", reward)
-        # print("New State:", new_state)
-
         state = new_state
         step += 1
         total_reward += reward
 
 
-def init():
-    # HYPER PARAMETERS TO SEARCH
-    hidden_layer_nodes = np.arange(32, 240, 64)  # 32, 64, 96, 128 ....
-    num_episodes = [1000]
-    replay_memory_size = [1000]
-    final_layer_activation = ["linear"]
-    minibatch_sizes = [16, 32]
-    learning_rates = [1e-2]
-
-    for num_episode in num_episodes:
-        for nodes in hidden_layer_nodes:
-            for lr in learning_rates:
-                for mem_size in replay_memory_size:
-                    for minibatch in minibatch_sizes:
-                        for final_act in final_layer_activation:
-                            main(num_episode, nodes, mem_size, final_act, minibatch, lr)
-
-
 if __name__ == "__main__":
     # init()
     # pass in specific params to function, otherwise uses default ones
-    main(num_episodes=5000, memory_size=10_000, nodes=49, minibatch=32, lr=1e-2)
-    # play()
+    play()
