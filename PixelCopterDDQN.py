@@ -123,7 +123,7 @@ class DDQNAgent:
         self.MINIBATCH_SIZE = minibatch
         self.LEARNING_RATE = lr
         self.MODEL_NAME = f"model - ({lr} {minibatch} {memory_size} {nodes} {final_act} {num_episodes})"
-        self.LOAD_MODEL = "ddqn/best/model - (0.01 64 10000 49 linear 5000)____49.39max____9.64 avg___-0.62min.h5"
+        self.LOAD_MODEL = "ddqn/best/model - (0.01 64 10000 49 linear 10000)____47.30max____8.95avg___-1.73min_model.h5"
         # Set to LOAD_MODEL to NONE to train from scratch
 
         self.model = self.create_model(self.LOAD_MODEL)
@@ -146,7 +146,7 @@ class DDQNAgent:
         if model_file:
             print("Loading model...")
             model = keras.models.load_model(model_file)
-            self.EPSILON = 0.05
+            self.EPSILON = 0
         else:
             model = Sequential()
 
@@ -355,12 +355,6 @@ def play():
         reward = env.act(action)
         new_state = np.array(list(env.getGameState().values()))
 
-        # PRINT CURRENT STATS
-        # print("Current State:", state)
-        # print("Action:", action, action_string)
-        # print("Reward:", reward)
-        # print("New State:", new_state)
-
         state = new_state
         step += 1
         total_reward += reward
@@ -386,4 +380,5 @@ def optimize():
 
 if __name__ == "__main__":
     # pass in specific params to function, otherwise uses default ones
-    main(num_episodes=5000, nodes=49, minibatch=32, lr=1e-2)
+    # main(num_episodes=5000, nodes=49, minibatch=32, lr=1e-2)
+    play()

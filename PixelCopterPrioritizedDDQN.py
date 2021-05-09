@@ -161,7 +161,7 @@ class DDQNAgent:
         self.MINIBATCH_SIZE = minibatch
         self.LEARNING_RATE = lr
         self.MODEL_NAME = f"model - ({lr} {minibatch} {memory_size} {nodes} {final_act} {num_episodes})"
-        self.LOAD_MODEL = "per/best/model - (0.01 128 10000 49 linear 5000)____91.97max___30.01 avg___-1.67min.h5"
+        self.LOAD_MODEL = "per/best/model - (0.01 64 10000 49 linear 10000)__126.08max___24.55 avg___-1.69min.h5"
         # Set to LOAD_MODEL to NONE to train from scratch
 
         self.model = self.create_model(self.LOAD_MODEL)

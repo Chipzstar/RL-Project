@@ -1,7 +1,7 @@
 import math
 import sys
 
-#import .base
+# import .base
 from .base.pygamewrapper import PyGameWrapper
 
 import pygame
@@ -227,8 +227,8 @@ class Pixelcopter(PyGameWrapper):
         self.player_group.add(self.player)
 
         self.block_group = pygame.sprite.Group()
-        self.block_x_pos = [297, 291, 343, 300, 348, 321, 265, 313, 300, 320, 322]
-        self.block_y_pos = [92, 115, 124, 95, 116, 68, 92, 96, 118, 96, 111]
+        self.block_x_pos = [297, 291, 343, 300, 348, 321, 265, 313, 300, 320]
+        self.block_y_pos = [92, 115, 124, 95, 116, 68, 92, 96, 118, 96]
         # self.block_x_pos = [self.rng.randint(self.width, int(self.width * 1.5)) for i in range(50)]
         # self.block_y_pos = [self.rng.randint(int(self.height * 0.25), int(self.height * 0.55)) for i in range(50)]
         self._add_blocks_fixed(self.block_x_pos[self.block_num], self.block_y_pos[self.block_num])
@@ -236,20 +236,23 @@ class Pixelcopter(PyGameWrapper):
 
         self.terrain_group = pygame.sprite.Group()
         # y_pos = self._add_terrain(0, self.width * 4)
-        y_pos = [147, 159, 159, 146, 120, 100, 96, 98, 115, 135, 153, 159, 146, 132, 115, 97, 97, 110, 135, 152, 158,
-                 155, 138, 112, 99, 96, 105, 123, 138, 156, 157, 143, 127, 105, 96, 101, 115, 140, 149, 159, 152,
-                 147, 159, 159, 146, 120, 100, 96, 98, 115, 135, 153, 159, 146, 132, 115, 97, 97, 110, 135, 152, 158,
-                 155, 138, 112, 99, 96, 105, 123, 138, 156, 157, 143, 127, 105, 96, 101, 115, 140, 149, 159, 152, 119,
-                 102, 136, 102, 144, 141, 144, 148, 144, 139, 112, 111, 103, 149, 158, 111, 113, 112, 154, 137]
+        self.y_pos = [147, 159, 159, 146, 120, 100, 96, 98, 115, 135, 153, 159, 146, 132, 115, 97, 97, 110, 135, 152,
+                      158, 155, 138, 112, 99, 96, 105, 123, 138, 156, 157, 143, 127, 105, 96, 101, 115, 140, 149, 159, 152,
+                      147, 159, 159, 146, 120, 100, 96, 98, 115, 135, 153, 159, 146, 132, 115, 97, 97, 110, 135, 152,
+                      158, 155, 138, 112, 99, 96, 105, 123, 138, 156, 157, 143, 127, 105, 96, 101, 115, 140, 149, 159, 152,
+                      119, 102, 136, 102, 144, 141, 144, 148, 144, 139, 112, 111, 103, 149, 158, 111, 113, 112, 154, 137,
+                      147, 159, 159, 146, 120, 100, 96, 98, 115, 135, 153, 159, 146, 132, 115, 97, 97, 110, 135, 152,
+                      158, 155, 138, 112, 99, 96, 105, 123, 138, 156, 157, 143, 127, 105, 96, 101, 115, 140, 149, 159, 152,
+                      119, 102, 136, 102, 144, 141, 144, 148, 144, 139, 112, 111, 103, 149, 158, 111, 113, 112, 154]
         # fixed map
-        self._add_terrain_fixed(y_pos, 0, self.width * 4)
+        self._add_terrain_fixed(0, self.width * 4)
 
-    def _add_terrain_fixed(self, y_pos, start, end):
+    def _add_terrain_fixed(self, start, end):
         w = int(self.width * 0.1)
         steps = range(start + int(w / 2), end + int(w / 2), w)
         for i in range(0, len(steps)):
             self.terrain_group.add(Terrain(
-                (steps[i], y_pos[i]),
+                (steps[i], self.y_pos[i]),
                 self.speed,
                 self.width,
                 self.height
@@ -264,7 +267,7 @@ class Pixelcopter(PyGameWrapper):
         freq = 4.5 / self.width + self.rng.uniform(-0.01, 0.01)
         for step in steps:
             jitter = (self.height * 0.125) * \
-                math.sin(freq * step + self.rng.uniform(0.0, 0.5))
+                     math.sin(freq * step + self.rng.uniform(0.0, 0.5))
             y_jitter.append(jitter)
 
         y_pos = [int((self.height / 2.0) + y_jit) for y_jit in y_jitter]
@@ -356,7 +359,7 @@ class Pixelcopter(PyGameWrapper):
             self.lives -= 1
 
         if len(self.terrain_group) <= (10 + 3):  # 10% per terrain, offset of ~2 with 1 extra
-            self._add_terrain(self.width, self.width * 5)
+            self._add_terrain_fixed(self.width, self.width * 5)
 
         if self.lives <= 0.0:
             self.score += self.rewards["loss"]
@@ -375,6 +378,7 @@ class Pixelcopter(PyGameWrapper):
 
 if __name__ == "__main__":
     import numpy as np
+
     pygame.init()
     game = Pixelcopter(width=256, height=256)
     game.screen = pygame.display.set_mode(game.getScreenDims(), 0, 32)

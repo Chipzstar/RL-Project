@@ -129,7 +129,7 @@ class DQNAgent:
         self.LEARNING_RATE = lr
         self.EPSILON = 1 if mode == "train" else 0
         self.MODEL_NAME = f"model - ({lr} {minibatch} {memory_size} {nodes} {final_act} {num_episodes})"
-        self.MODEL_FILE = "dqn/best/DQN model LR=0.001 BATCH=32 MEM_SIZE=500____57.60max____7.97 avg___-4.10min.h5"
+        self.MODEL_FILE = "dqn/best/model - (0.01 64 10000 49 linear 10000____76.10max___16.44avg___-1.67min.h5"
         # main model  # gets trained every step
         self.model = self.create_model(self.MODEL_FILE)
         print(self.model.summary())
@@ -152,7 +152,7 @@ class DQNAgent:
         if model_file:
             print("Loading model...")
             model = keras.models.load_model(model_file)
-            self.EPSILON = 0.05
+            self.EPSILON = 0
         else:
             model = Sequential()
 
@@ -395,5 +395,5 @@ def play():
 
 
 if __name__ == "__main__":
-    # init()
-    learn(nodes=49, num_episodes=5000, lr=1e-2)
+    play()
+    # learn(nodes=49, num_episodes=5000, lr=1e-2)
