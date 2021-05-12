@@ -129,7 +129,7 @@ class DQNAgent:
         self.LEARNING_RATE = lr
         self.EPSILON = 1 if mode == "train" else 0
         self.MODEL_NAME = f"model - ({lr} {minibatch} {memory_size} {nodes} {final_act} {num_episodes})"
-        self.MODEL_FILE = "dqn/best/model - (0.01 64 10000 49 linear 10000____76.10max___16.44avg___-1.67min.h5"
+        self.MODEL_FILE = "dqn/best/model - (0.01 64 10000 49 linear 10000___111.11max___23.35avg___-3.82min.h5"
         # main model  # gets trained every step
         self.model = self.create_model(self.MODEL_FILE)
         print(self.model.summary())
@@ -379,6 +379,7 @@ def play():
             env.reset_game()
 
         action_index, action = agent.select_action(state)
+        # obtime.sleep(0.05)
         # action_string = 'jump!' if action_index == 1 else 'chill'
         reward = env.act(action)
         new_state = np.array(list(env.getGameState().values()))
