@@ -11,7 +11,7 @@ import theano.tensor as T
 
 class ExampleAgent():
     """
-        Implements a DQN-ish agent. It has replay memory and epsilon decay. It is missing model freezing. The models are sensitive to the parameters and if applied to other games must be tinkered with.
+        Implements a DQN-ish agent. It has replay memory and epsilon decay. It is missing model freezing. The dqn are sensitive to the parameters and if applied to other games must be tinkered with.
 
     """
 
@@ -207,8 +207,8 @@ def loop_play_forever(env, agent):
                 reward, action = agent.act(state, epsilon=0.05)
                 episode_reward += reward
 
-            print "Agent score {:0.1f} reward for episode.".format(episode_reward)
+            print("Agent score {:0.1f} reward for episode.".format(episode_reward))
             agent.end_episode()
 
     except KeyboardInterrupt:
-        print "Exiting out!"
+        print("Exiting out!")

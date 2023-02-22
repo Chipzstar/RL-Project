@@ -119,13 +119,13 @@ if __name__ == "__main__":
                 steps += 1
 
             if num_episodes % 5 == 0:
-                print "Episode {:01d}: Reward {:0.1f}".format(num_episodes, episode_reward)
+                print("Episode {:01d}: Reward {:0.1f}".format(num_episodes, episode_reward))
 
             rewards.append(episode_reward)
             num_episodes += 1
             agent.end_episode()
 
-        print "\nTrain Epoch {:02d}: Epsilon {:0.4f} | Avg. Loss {:0.3f} | Avg. Reward {:0.3f}".format(epoch, epsilon, np.mean(losses), np.sum(rewards) / num_episodes)
+        print("\nTrain Epoch {:02d}: Epsilon {:0.4f} | Avg. Loss {:0.3f} | Avg. Reward {:0.3f}".format(epoch, epsilon, np.mean(losses), np.sum(rewards) / num_episodes))
 
         steps, num_episodes = 0, 0
         losses, rewards = [], []
@@ -154,13 +154,13 @@ if __name__ == "__main__":
                     env.display_screen = False
 
             if num_episodes % 5 == 0:
-                print "Episode {:01d}: Reward {:0.1f}".format(num_episodes, episode_reward)
+                print("Episode {:01d}: Reward {:0.1f}".format(num_episodes, episode_reward))
 
             rewards.append(episode_reward)
             num_episodes += 1
             agent.end_episode()
 
-        print "Test Epoch {:02d}: Best Reward {:0.3f} | Avg. Reward {:0.3f}".format(epoch, np.max(rewards), np.sum(rewards) / num_episodes)
+        print("Test Epoch {:02d}: Best Reward {:0.3f} | Avg. Reward {:0.3f}".format(epoch, np.max(rewards), np.sum(rewards) / num_episodes))
 
-    print "\nTraining complete. Will loop forever playing!"
+    print("\nTraining complete. Will loop forever playing!")
     loop_play_forever(env, agent)
