@@ -12,8 +12,8 @@ I read a variety of articles and Medium blog posts to get familiar with RL. Ther
 
 Here are some links:
 
-Q-learning with Neural Networks - this is the one I used the most, it's amazing. I recommend understanding parts 1 and 2 also.
-An introduction to Deep Q-Learning: let’s play Doom
-Playing Atari with Deep Reinforcement Learning - DeepMind Paper
-David Silver's RL Course - I watched a few of these
-Python Learning Environment - used to build the game
+- Q-learning with Neural Networks - this is the one I used the most, it's amazing. I recommend understanding parts 1 and 2 also.
+- An introduction to Deep Q-Learning: let’s play Doom
+- Playing Atari with Deep Reinforcement Learning - DeepMind Paper
+- David Silver's RL Course - I watched a few of these
+- Python Learning Environment - used to build the game
